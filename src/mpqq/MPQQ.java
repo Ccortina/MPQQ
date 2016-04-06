@@ -59,49 +59,31 @@ public class MPQQ {
      * This method process the information for Tab 1 
      * 1. Supplier Basic Info using Tracker tab from
      * reference file.
-     * @param referenceWB The workbook from were the information is going to be copied
      * @param mpqqWB The workbook of the mpqq where the info will be written
-     * @param firstRow The first row from where the program must start copying
      */
-    private static XSSFWorkbook procTab1(XSSFWorkbook referenceWB, 
+    private static XSSFWorkbook procTab1(Row referenceCurrentRow, 
                                             XSSFWorkbook mpqqWB,
-                                            int referenceFirstRow){
+                                            int mpqqCurrentRow){
         
-        XSSFSheet trackerTab = referenceWB.getSheetAt(USE_FOR_TAB1);
         XSSFSheet tab1 = mpqqWB.getSheetAt(1);
-        //Iterator<Row> rowIterator = trackerTab.iterator();
         DataFormatter df = new DataFormatter();
 
-        //MPQQ first row    
-        int rowIdx = 11;
-        
-        for(int refCurRow = referenceFirstRow; refCurRow <= trackerTab.getLastRowNum();refCurRow++){
-            Row row = trackerTab.getRow(refCurRow);
-            
-            //Check if row is visible
-            if( !row.getZeroHeight() || (row.isFormatted() && row.getRowStyle().getHidden())){
+        int colIdx = 1;
+        Iterator<Cell> cellIterator = referenceCurrentRow.cellIterator();
+        while(cellIterator.hasNext()) {
+            Cell cell = cellIterator.next();
+            switch(cell.getColumnIndex()){
+                case 3:
+                    Cell currentCell = checkRowCellExists(tab1,mpqqCurrentRow,colIdx);
+                    currentCell.setCellValue(df.formatCellValue(referenceCurrentRow.getCell(T2PEPSICO_STOCK_CODE)));
 
-                int colIdx = 1;
-                //Iterate trough the Columns
-                Iterator<Cell> cellIterator = row.cellIterator();
-                while(cellIterator.hasNext()) {
-                    Cell cell = cellIterator.next();
-                    switch(cell.getColumnIndex()){
-                        case 3:
-                            Cell currentCell = checkRowCellExists(tab1,rowIdx,colIdx);
-                            currentCell.setCellValue(df.formatCellValue(row.getCell(T2PEPSICO_STOCK_CODE)));
-                            
-                            //Go to next Column
-                            colIdx++;
-                            break;
-                        case 4:
-                            
-                            break;
-                        default:
-                    }
-                }
-                //Jump Next Row
-                rowIdx++;
+                    //Go to next Column
+                    colIdx++;
+                    break;
+                case 4:
+
+                    break;
+                default:
             }
         }
         return mpqqWB;
@@ -111,8 +93,7 @@ public class MPQQ {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        
-        
+
         try{
             //Read Reference File
             FileInputStream referenceFile = new FileInputStream(
@@ -120,21 +101,68 @@ public class MPQQ {
             XSSFWorkbook reference = new XSSFWorkbook(referenceFile);
             reference.close();
             
+            //Load MPQQ template
             FileInputStream mpqqFile = new FileInputStream(
-                    new File("C:\\Personal\\09168336\\Documents\\mpqq.xlsm"));
+                    new File("C:\\Personal\\09168336\\Documents\\MPQQ_Template.xlsm"));
             XSSFWorkbook mpqq = new XSSFWorkbook( mpqqFile );
             mpqqFile.close();
             int referenceStartRow = 156;
             
-            //Create a MPQQ for each supplier in the reference document
-            String currentSupplier = reference.getSheetAt(USE_FOR_TAB1)
-                    .getRow(referenceStartRow)
-                    .getCell(T2PEPSICO_SUPPLIER_SITE_NAME)
-                    .getStringCellValue();
+            XSSFSheet trackerTab = reference.getSheetAt(USE_FOR_TAB1);
             
-            System.out.println(currentSupplier);
+            //MPQQ first row  
+            int mpqqCurrentRow = 11,mpqqFirstRow = 11;  
+            String currentSupplier ="";
             
-            mpqq = procTab1(reference, mpqq,referenceStartRow);
+            for(int refCurRow = referenceStartRow; refCurRow <= trackerTab.getLastRowNum();refCurRow++){
+                Row row = trackerTab.getRow(refCurRow);
+      
+                //Check if row is visible
+                if( !row.getZeroHeight() || (row.isFormatted() && row.getRowStyle().getHidden())){
+                    
+                    //Check if the current Supplier has changed
+                    if( currentSupplier.isEmpty() || currentSupplier == null){
+                        currentSupplier = reference.getSheetAt(USE_FOR_TAB1)
+                        .getRow(refCurRow)
+                        .getCell(T2PEPSICO_SUPPLIER_SITE_NAME)
+                        .getStringCellValue();
+                    }else{
+                        String newSupplierName = reference.getSheetAt(USE_FOR_TAB1)
+                        .getRow(refCurRow)
+                        .getCell(T2PEPSICO_SUPPLIER_SITE_NAME)
+                        .getStringCellValue();
+
+                        //Start a new process for the new Supplier
+                        if( !currentSupplier.equals(newSupplierName) ){
+                            
+                            FileOutputStream outFile = new FileOutputStream(
+                                    new File("C:\\Personal\\09168336\\Documents\\MPQQ\\"+
+                                            currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
+                            mpqq.write(outFile);
+                            outFile.close();
+
+                            //Reload Template
+                            mpqqFile = new FileInputStream(
+                                    new File("C:\\Personal\\09168336\\Documents\\MPQQ_Template.xlsm"));
+                            mpqq = new XSSFWorkbook( mpqqFile );
+                            mpqqFile.close();
+                            currentSupplier = newSupplierName;
+                            mpqqCurrentRow = mpqqFirstRow;
+                        }
+                    }
+                    
+                    mpqq = procTab1(row, mpqq,mpqqCurrentRow);
+                    //Jump Next Row on the MQPP
+                    mpqqCurrentRow++;
+                }
+                
+            }
+            
+            //mpqq = procTab1(reference, mpqq,referenceStartRow);
+            
+            
+            
+            
             FileOutputStream outFile = new FileOutputStream(new File("C:\\Personal\\09168336\\Documents\\mpqq.xlsm"));
             mpqq.write(outFile);
             outFile.close();
@@ -148,34 +176,6 @@ public class MPQQ {
         }
         
         System.out.println("Testing");
-    }
-    
-    private static void printsheet(XSSFSheet sheet){
-        //Iterate through each rows from first sheet
-    Iterator<Row> rowIterator = sheet.iterator();
-    while(rowIterator.hasNext()) {
-        Row row = rowIterator.next();
-         
-        //For each row, iterate through each columns
-        Iterator<Cell> cellIterator = row.cellIterator();
-        while(cellIterator.hasNext()) {
-             
-            Cell cell = cellIterator.next();
-             
-            switch(cell.getCellType()) {
-                case Cell.CELL_TYPE_BOOLEAN:
-                    System.out.print(cell.getBooleanCellValue() + "\t\t");
-                    break;
-                case Cell.CELL_TYPE_NUMERIC:
-                    System.out.print(cell.getNumericCellValue() + "\t\t");
-                    break;
-                case Cell.CELL_TYPE_STRING:
-                    System.out.print(cell.getStringCellValue() + "\t\t");
-                    break;
-            }
-        }
-        System.out.println("");
-    }
     }
     
 }
