@@ -6,6 +6,7 @@
 package mpqq;
 
 import java.awt.Color;
+import java.io.BufferedReader;
 import java.io.File;
 /**
  *
@@ -17,6 +18,7 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -26,18 +28,14 @@ import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.apache.poi.hssf.usermodel.HSSFPalette;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.xssf.model.StylesTable;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
 import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
-import org.apache.poi.xssf.usermodel.extensions.XSSFCellBorder;
-import org.apache.poi.xssf.usermodel.extensions.XSSFCellFill;
 
 class MPQQProcTab6Helper{
     private int mpqqRowNumber;
@@ -282,8 +280,12 @@ public class MPQQ {
         style.setBorderTop(CellStyle.BORDER_THIN);
         style.setBorderRight(CellStyle.BORDER_THIN);
         style.setBorderLeft(CellStyle.BORDER_THIN);
+        style.setWrapText(true);
         XSSFColor myColor = filling? new XSSFColor(Color.decode("#FFFF99")): new XSSFColor(Color.WHITE);
         style.setFillForegroundColor(myColor);
+        Font bluefont = mpqqWB.createFont();
+        bluefont.setColor(new XSSFColor(new Color(54,95,145)).getIndex());        
+        style.setFont(bluefont);
         
         //Calculate if it will need additional params rows
         if( ingredientRows != null){
@@ -325,26 +327,37 @@ public class MPQQ {
                 for(List<String> ingredientCells: ingredientRows){
                     mpqqCurCol = MPQQ_TAB6_STARTING_COLUMN;
                     
-                    for(int cellIdx = 2; cellIdx <= 7; cellIdx++){
-                        Cell mpqqCurCell = checkRowCellExists(tab6,mpqqCurrentRow,mpqqCurCol);
-                        if( cellIdx == 7 && ingredientCells.size() >= 9 ){
-                            String paramDesc =  ingredientCells.get(cellIdx)+"-"+ingredientCells.get(cellIdx+1);
-                            if( !ingredientParams.contains(paramDesc) ){
-                                //Set on cell and add to list
-                                if(Arrays.asList(PARAMS_FOR_CONCAT).contains(ingredientCells.get(cellIdx))){
-                                   //If the param must be concatenated with the description 
-                                   mpqqCurCell.setCellValue(paramDesc); 
-                                }else{
-                                   mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
-                                }
-                                ingredientParams.add(paramDesc);
-                            }
-                        }else{
-                            mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
-                        }
-                        mpqqCurCol++;
+                    //Check if parameter already exist for this ingredient
+                    String paramDesc = "";
+                    if( ingredientCells.size() >= 9 ){
+                        paramDesc = ingredientCells.get(7)+"-"+ingredientCells.get(8);
+                    }else{
+                        paramDesc = ingredientCells.get(7);
                     }
-                    mpqqCurrentRow++;
+                    
+                    if( !ingredientParams.contains(paramDesc) ){
+                        for(int cellIdx = 2; cellIdx <= 7; cellIdx++){
+                            Cell mpqqCurCell = checkRowCellExists(tab6,mpqqCurrentRow,mpqqCurCol);
+                            if( cellIdx == 7 && ingredientCells.size() >= 9 ){
+                                //paramDesc =  ingredientCells.get(cellIdx)+"-"+ingredientCells.get(cellIdx+1);
+                                //if( !ingredientParams.contains(paramDesc) ){
+                                    //Set on cell and add to list
+                                    if(Arrays.asList(PARAMS_FOR_CONCAT).contains(ingredientCells.get(cellIdx))){
+                                       //If the param must be concatenated with the description 
+                                       mpqqCurCell.setCellValue(paramDesc); 
+                                    }else{
+                                       mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
+                                    }
+                                    //ingredientParams.add(paramDesc);
+                                //}
+                            }else{
+                                mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
+                            }
+                            mpqqCurCol++;
+                        } //End For
+                        mpqqCurrentRow++;
+                        ingredientParams.add(paramDesc);
+                    }
                 }
                 
                 for(String parameter: paramsByClass){
@@ -360,6 +373,8 @@ public class MPQQ {
         //Check if rows are at least the limit
         if( totalRows <= TEST_DATA_TAB_ROW_LIMIT ){
             mpqqCurrentRow = mpqqStartingRow + TEST_DATA_TAB_ROW_LIMIT;
+        }else{
+            mpqqCurrentRow = mpqqStartingRow + totalRows;
         }
         return new MPQQProcTab6Helper(mpqqCurrentRow, mpqqWB);
     }
@@ -369,17 +384,59 @@ public class MPQQ {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        
+        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+        String refPath ="";
+        String mpqqTemplatePath = "";
+        String outputFolderPath = "";
         try{
             //Read Reference File
+            
+            boolean validPath = true;
+            while(validPath){
+                System.out.println("Reference File");
+                refPath = reader.readLine();
+                File f = new File(refPath);
+                if(f.exists() & ! f.isDirectory()){
+                    validPath = false;
+                }else{
+                    System.err.println("The specified File does not exist");
+                    validPath = true;
+                }
+            }
+            validPath = true;
+            while(validPath){
+                System.out.println("MPQQ Template");
+                mpqqTemplatePath = reader.readLine();
+                File f = new File(mpqqTemplatePath);
+                if(f.exists() & ! f.isDirectory()){
+                    validPath = false;
+                }else{
+                    System.err.println("The specified File does not exist");
+                    validPath = true;
+                }
+            }
+            validPath = true;
+            while(validPath){
+                System.out.println("Output Folder Path");
+                outputFolderPath = reader.readLine();
+                File f = new File(outputFolderPath);
+                if(f.exists() && f.isDirectory()){
+                    validPath = false;
+                }else{
+                    System.err.println("The specified Directory does not exist");
+                    validPath = true;
+                }
+            }
+            
+            
             FileInputStream referenceFile = new FileInputStream(
-                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\iRef_org.xlsx"));
+                    new File(refPath));
             XSSFWorkbook reference = new XSSFWorkbook(referenceFile);
             reference.close();
             
             //Load MPQQ template
             FileInputStream mpqqFile = new FileInputStream(
-                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\MPQQ_Template.xlsm"));
+                    new File(mpqqTemplatePath));
             XSSFWorkbook mpqq = new XSSFWorkbook( mpqqFile );
             mpqqFile.close();
             //First row to consider from Reference File based on 0 index
@@ -434,7 +491,7 @@ public class MPQQ {
                         XSSFFormulaEvaluator.evaluateAllFormulaCells(mpqq);
                         try{
                             FileOutputStream outFile = new FileOutputStream(
-                                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\Output\\"+
+                                    new File(outputFolderPath+"\\"+
                                             currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
                             mpqq.write(outFile);
                             outFile.close();
@@ -446,10 +503,9 @@ public class MPQQ {
                         String nextSupplier = df.formatCellValue(validRows.get(i+1).getCell(T2PEPSICO_SUPPLIER_SITE_NAME));
                         if( !currentSupplier.equalsIgnoreCase(nextSupplier) ){
                             XSSFFormulaEvaluator.evaluateAllFormulaCells(mpqq);
-                            
                             try{
                                 FileOutputStream outFile = new FileOutputStream(
-                                        new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\Output\\"+
+                                        new File(outputFolderPath+"\\"+
                                                 currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
                                 mpqq.write(outFile);
                                 outFile.close();
@@ -458,7 +514,7 @@ public class MPQQ {
                             }
                             //Reload Template
                             mpqqFile = new FileInputStream(
-                                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\MPQQ_Template.xlsm"));
+                                    new File(mpqqTemplatePath));
                             mpqq = new XSSFWorkbook( mpqqFile );
                             mpqqFile.close();
                             mpqqTab1CurrentRow = mpqqTab1FirstRow;
