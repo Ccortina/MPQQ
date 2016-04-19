@@ -440,7 +440,7 @@ public class MPQQ {
             XSSFWorkbook mpqq = new XSSFWorkbook( mpqqFile );
             mpqqFile.close();
             //First row to consider from Reference File based on 0 index
-            int referenceStartRow = 156;
+            int referenceStartRow = 1;
             
             XSSFSheet trackerTab = reference.getSheetAt(USE_FOR_TAB1);
             
