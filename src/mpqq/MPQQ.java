@@ -263,7 +263,8 @@ public class MPQQ {
                                             int mpqqStartingRow,
                                             Map<String,Map<String,List<String>>>map2,
                                             Map<String,List<List<String>>>map,
-                                            int evenRow){
+                                            //int evenRow
+                                            boolean filling){
         
         XSSFSheet tab6 = mpqqWB.getSheetAt(MPQQ_TAB_TEST_DATA);
 
@@ -273,30 +274,32 @@ public class MPQQ {
         //mpqqcurrentRow has the index for the current row meanwhile mpqqRowCounter 
         //has the numberof rows for that ingredient
         int mpqqCurrentRow = mpqqStartingRow,mpqqCurCol;
-
-        XSSFColor myColor = new XSSFColor(Color.decode("#FFFF99"));
+        int totalRows = 0;
+        
         XSSFCellStyle style = mpqqWB.createCellStyle();
         style.setFillPattern(CellStyle.SOLID_FOREGROUND);
         style.setBorderBottom(CellStyle.BORDER_THIN);
         style.setBorderTop(CellStyle.BORDER_THIN);
         style.setBorderRight(CellStyle.BORDER_THIN);
         style.setBorderLeft(CellStyle.BORDER_THIN);
+        XSSFColor myColor = filling? new XSSFColor(Color.decode("#FFFF99")): new XSSFColor(Color.WHITE);
         style.setFillForegroundColor(myColor);
         
         //Calculate if it will need additional params rows
         if( ingredientRows != null){
             if( ingredientRows.size() > 0){
                 //Rows from Tab1
-                int totalRows = ingredientRows.size();
+                totalRows = ingredientRows.size();
                 //Rows from tab 2
                 String ingClass = ingredientRows.get(0).get(2);
                 String ingSubClass = ingredientRows.get(0).get(3);
                 
                 Map<String,List<String>> ingClassMap = map2.get(ingClass);
-                
+                List<String> paramsByClass = new ArrayList<>();
                 if(ingClassMap != null ){
                     if( ingClassMap.containsKey(ingSubClass)){
-                        totalRows += map2.get(ingClass).get(ingSubClass).size();
+                        paramsByClass = map2.get(ingClass).get(ingSubClass);
+                        totalRows += paramsByClass.size();
                     }else{
                         System.err.println("The Sub-Class "+ingSubClass+" could not be found. Check reference document.");
                     }
@@ -309,9 +312,11 @@ public class MPQQ {
                     tab6.shiftRows(mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT, tab6.getLastRowNum()+1, totalRows-TEST_DATA_TAB_ROW_LIMIT);
                     //Copy first 4 columns of formulas
                     for(int i=1; i<=totalRows-TEST_DATA_TAB_ROW_LIMIT; i++){                       
-                        for(int j=1; j<=4 ; j++){
+                        for(int j=1; j<=18 ; j++){
                             Cell newCell = checkRowCellExists(tab6,mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT+i-1,j);
-                            newCell.setCellFormula(tab6.getRow(mpqqStartingRow).getCell(j).getCellFormula());
+                            if( j <=4 ){
+                                newCell.setCellFormula(tab6.getRow(mpqqStartingRow).getCell(j).getCellFormula());
+                            }
                             newCell.setCellStyle(style);
                         }
                     }
@@ -339,10 +344,12 @@ public class MPQQ {
                         }
                         mpqqCurCol++;
                     }
-                    for(int i=1; i<= 18; i++){
-                        Cell stylecell = checkRowCellExists(tab6, mpqqCurrentRow, i);
-                        stylecell.setCellStyle(style);
-                    }
+                    mpqqCurrentRow++;
+                }
+                
+                for(String parameter: paramsByClass){
+                    Cell mpqqCurCell = checkRowCellExists(tab6,mpqqCurrentRow,10);
+                    mpqqCurCell.setCellValue(parameter); 
                     mpqqCurrentRow++;
                 }
             }
@@ -350,6 +357,10 @@ public class MPQQ {
             System.err.println("Ingredient "+ pepsicoStockCode + " was not found on reference document.");
         }
         
+        //Check if rows are at least the limit
+        if( totalRows <= TEST_DATA_TAB_ROW_LIMIT ){
+            mpqqCurrentRow = mpqqStartingRow + TEST_DATA_TAB_ROW_LIMIT;
+        }
         return new MPQQProcTab6Helper(mpqqCurrentRow, mpqqWB);
     }
     
@@ -362,13 +373,13 @@ public class MPQQ {
         try{
             //Read Reference File
             FileInputStream referenceFile = new FileInputStream(
-                    new File("C:\\Users\\admin\\Documents\\MPQQ\\iRef.xlsx"));
+                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\iRef_org.xlsx"));
             XSSFWorkbook reference = new XSSFWorkbook(referenceFile);
             reference.close();
             
             //Load MPQQ template
             FileInputStream mpqqFile = new FileInputStream(
-                    new File("C:\\Users\\admin\\Documents\\MPQQ\\MPQQ_Template.xlsm"));
+                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\MPQQ_Template.xlsm"));
             XSSFWorkbook mpqq = new XSSFWorkbook( mpqqFile );
             mpqqFile.close();
             //First row to consider from Reference File based on 0 index
@@ -381,6 +392,7 @@ public class MPQQ {
             int mpqqTab6CurrentRow = 9,mpqqTab6FirstRow = 9;  
             String currentSupplier ="";
             DataFormatter df = new DataFormatter();
+            boolean filling = false;
             
             //Get all the valid rows in the range, not empty nor hidden rows.
             List<Row> validRows = new ArrayList<>();
@@ -404,25 +416,25 @@ public class MPQQ {
                     
                     Map<String,List<List<String>>> map = createMapFromSheet(reference.getSheetAt(USE_FOR_TAB6_1),1);
                     Map<String,Map<String,List<String>>> tab62Map = createMapFromSheet(reference.getSheetAt(USE_FOR_TAB6_2),0,1);
-
                     MPQQProcTab6Helper auxiliarClass = procTab6(df.formatCellValue(curRefRow.getCell(T2PEPSICO_STOCK_CODE)),
                                                         mpqq,
                                                         mpqqTab6CurrentRow,
                                                         tab62Map,
                                                         map,
-                                                        i&2);
+                                                        filling);
                     mpqq = auxiliarClass.getWorkbook();
                     
                     //Jump Next Row on the MQPP
                     mpqqTab1CurrentRow++;
                     mpqqTab6CurrentRow = auxiliarClass.getMpqqRowNumber();
+                    filling = !filling;
                     
                     //Check if next supplier changes or is this last row?
                     if( i+1 == validRows.size() ){
                         XSSFFormulaEvaluator.evaluateAllFormulaCells(mpqq);
                         try{
                             FileOutputStream outFile = new FileOutputStream(
-                                    new File("C:\\Users\\admin\\Documents\\MPQQ\\Output\\"+
+                                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\Output\\"+
                                             currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
                             mpqq.write(outFile);
                             outFile.close();
@@ -437,7 +449,7 @@ public class MPQQ {
                             
                             try{
                                 FileOutputStream outFile = new FileOutputStream(
-                                        new File("C:\\Users\\admin\\Documents\\MPQQ\\Output\\"+
+                                        new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\Output\\"+
                                                 currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
                                 mpqq.write(outFile);
                                 outFile.close();
@@ -446,11 +458,12 @@ public class MPQQ {
                             }
                             //Reload Template
                             mpqqFile = new FileInputStream(
-                                    new File("C:\\Users\\admin\\Documents\\MPQQ\\MPQQ_Template.xlsm"));
+                                    new File("C:\\Users\\Carlos Cortina\\Documents\\Kalypso\\Pepsico\\MPQQ\\MPQQ_Template.xlsm"));
                             mpqq = new XSSFWorkbook( mpqqFile );
                             mpqqFile.close();
                             mpqqTab1CurrentRow = mpqqTab1FirstRow;
                             mpqqTab6CurrentRow = mpqqTab6FirstRow;
+                            filling = false;
                         }
                     }
 
