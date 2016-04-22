@@ -39,11 +39,13 @@ import org.apache.poi.xssf.usermodel.XSSFFormulaEvaluator;
 
 class MPQQProcTab6Helper{
     private int mpqqRowNumber;
+    private int formulaRowIdx;
     private XSSFWorkbook workbook;
 
-    public MPQQProcTab6Helper(int mpqqRowNumber, XSSFWorkbook workbook) {
+    public MPQQProcTab6Helper(int mpqqRowNumber, XSSFWorkbook workbook, int formulaRowIdx) {
         this.mpqqRowNumber = mpqqRowNumber;
         this.workbook = workbook;
+        this.formulaRowIdx = formulaRowIdx;
     }
 
     public int getMpqqRowNumber() {
@@ -61,7 +63,14 @@ class MPQQProcTab6Helper{
     public void setWorkbook(XSSFWorkbook workbook) {
         this.workbook = workbook;
     }
-    
+
+    public int getFormulaRowIdx() {
+        return formulaRowIdx;
+    }
+
+    public void setFormulaRowIdx(int formulaRowIdx) {
+        this.formulaRowIdx = formulaRowIdx;
+    }
     
 }
 
@@ -89,7 +98,12 @@ public class MPQQ {
     
     //Parameters that need concatenation of their description
     private static final String[] PARAMS_FOR_CONCAT = new String[]{"Particle Distribution",
-                                            "Part. Dist.-Pan","Fatty Acid Composition"};
+                                            "Part. Dist.-Pan","Fatty Acid Composition",
+                                            "Free Fatty Acids","PV","para-Anisidine"};
+   
+    private static final int FORMULA_IDX_LIM = 23;
+    private static final char[] FORMULA_COL_IDX = new char[]{'B','F','G','H'};
+    private static Object FileUtils;
     
     /**
      * This method will check if the index for the row
@@ -261,9 +275,9 @@ public class MPQQ {
                                             int mpqqStartingRow,
                                             Map<String,Map<String,List<String>>>map2,
                                             Map<String,List<List<String>>>map,
-                                            //int evenRow
-                                            boolean filling){
-        
+                                            boolean filling,
+                                            int formulaCurRow){
+
         XSSFSheet tab6 = mpqqWB.getSheetAt(MPQQ_TAB_TEST_DATA);
 
         List<List<String>> ingredientRows = map.get(pepsicoStockCode);
@@ -311,15 +325,37 @@ public class MPQQ {
                 
                 if(totalRows > TEST_DATA_TAB_ROW_LIMIT){
                     //Move the rows
-                    tab6.shiftRows(mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT, tab6.getLastRowNum()+1, totalRows-TEST_DATA_TAB_ROW_LIMIT);
+                    int start =mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT ,end= tab6.getLastRowNum()+1,shift=totalRows-TEST_DATA_TAB_ROW_LIMIT;
+                    if( start >= end ){  //The list is at its limit , need new rows.
+                        tab6.shiftRows( mpqqCurrentRow, mpqqCurrentRow , totalRows);
+                        formulaCurRow++;
+                    }else{
+                        tab6.shiftRows( start, end , shift);
+                    }
                     //Copy first 4 columns of formulas
-                    for(int i=1; i<=totalRows-TEST_DATA_TAB_ROW_LIMIT; i++){                       
-                        for(int j=1; j<=18 ; j++){
-                            Cell newCell = checkRowCellExists(tab6,mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT+i-1,j);
-                            if( j <=4 ){
-                                newCell.setCellFormula(tab6.getRow(mpqqStartingRow).getCell(j).getCellFormula());
+                    if( start >= end){
+                        for(int i=1; i<=totalRows; i++){                       
+                            for(int j=1; j<=18 ; j++){
+                                Cell newCell = checkRowCellExists(tab6,mpqqCurrentRow+i-1,j);
+                                if( j <=4 ){
+                                    String formIndex = FORMULA_COL_IDX[j-1] + "$" + Integer.toString(formulaCurRow);
+                                    String formula = "IF('1. Supplier Basic Info'!"+formIndex+
+                                            "<>\"\",'1. Supplier Basic Info'!"+ formIndex +",\"\")";
+                                    
+                                    newCell.setCellFormula(formula);
+                                }
+                                newCell.setCellStyle(style);
                             }
-                            newCell.setCellStyle(style);
+                        }
+                    }else{
+                        for(int i=1; i<=totalRows-TEST_DATA_TAB_ROW_LIMIT; i++){                       
+                            for(int j=1; j<=18 ; j++){
+                                Cell newCell = checkRowCellExists(tab6,mpqqCurrentRow+TEST_DATA_TAB_ROW_LIMIT+i-1,j);
+                                if( j <=4 ){
+                                    newCell.setCellFormula(tab6.getRow(mpqqStartingRow).getCell(j).getCellFormula());
+                                }
+                                newCell.setCellStyle(style);
+                            }
                         }
                     }
                 }
@@ -332,7 +368,12 @@ public class MPQQ {
                     if( ingredientCells.size() >= 9 ){
                         paramDesc = ingredientCells.get(7)+"-"+ingredientCells.get(8);
                     }else{
-                        paramDesc = ingredientCells.get(7);
+                        if( ingredientCells.size() > 7 ){
+                            paramDesc = ingredientCells.get(7);
+                        }else{
+                            paramDesc = "";
+                        }
+                        
                     }
                     
                     if( !ingredientParams.contains(paramDesc) ){
@@ -351,7 +392,9 @@ public class MPQQ {
                                     //ingredientParams.add(paramDesc);
                                 //}
                             }else{
-                                mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
+                                if( ingredientCells.size() > 7){
+                                    mpqqCurCell.setCellValue(ingredientCells.get(cellIdx));
+                                }
                             }
                             mpqqCurCol++;
                         } //End For
@@ -376,7 +419,7 @@ public class MPQQ {
         }else{
             mpqqCurrentRow = mpqqStartingRow + totalRows;
         }
-        return new MPQQProcTab6Helper(mpqqCurrentRow, mpqqWB);
+        return new MPQQProcTab6Helper(mpqqCurrentRow, mpqqWB,formulaCurRow);
     }
     
  
@@ -399,7 +442,7 @@ public class MPQQ {
                 if(f.exists() & ! f.isDirectory()){
                     validPath = false;
                 }else{
-                    System.err.println("The specified File does not exist");
+                    System.err.println("The specified File does not exist.Try again");
                     validPath = true;
                 }
             }
@@ -411,7 +454,7 @@ public class MPQQ {
                 if(f.exists() & ! f.isDirectory()){
                     validPath = false;
                 }else{
-                    System.err.println("The specified File does not exist");
+                    System.err.println("The specified File does not exist.Try again");
                     validPath = true;
                 }
             }
@@ -422,12 +465,12 @@ public class MPQQ {
                 File f = new File(outputFolderPath);
                 if(f.exists() && f.isDirectory()){
                     validPath = false;
+                    for(File file: f.listFiles()) file.delete(); 
                 }else{
-                    System.err.println("The specified Directory does not exist");
+                    System.err.println("The specified Directory does not exist.Try again");
                     validPath = true;
                 }
             }
-            
             
             FileInputStream referenceFile = new FileInputStream(
                     new File(refPath));
@@ -450,6 +493,7 @@ public class MPQQ {
             String currentSupplier ="";
             DataFormatter df = new DataFormatter();
             boolean filling = false;
+            int formulaCurRow = FORMULA_IDX_LIM;
             
             //Get all the valid rows in the range, not empty nor hidden rows.
             List<Row> validRows = new ArrayList<>();
@@ -465,10 +509,12 @@ public class MPQQ {
             
             //Process the valid rows
             if(validRows.size() > 0 ){
+                
                 for(int i =0; i < validRows.size(); i++ ){
+                   
                    Row curRefRow = validRows.get(i);
                    currentSupplier = df.formatCellValue(curRefRow.getCell(T2PEPSICO_SUPPLIER_SITE_NAME));
-                   
+                   System.out.println("Processing ingredient "+ df.formatCellValue(curRefRow.getCell(T2PEPSICO_STOCK_CODE)));
                     mpqq = procTab1(curRefRow, mpqq, mpqqTab1CurrentRow);
                     
                     Map<String,List<List<String>>> map = createMapFromSheet(reference.getSheetAt(USE_FOR_TAB6_1),1);
@@ -478,7 +524,8 @@ public class MPQQ {
                                                         mpqqTab6CurrentRow,
                                                         tab62Map,
                                                         map,
-                                                        filling);
+                                                        filling,
+                                                        formulaCurRow);
                     mpqq = auxiliarClass.getWorkbook();
                     
                     //Jump Next Row on the MQPP
@@ -490,9 +537,17 @@ public class MPQQ {
                     if( i+1 == validRows.size() ){
                         XSSFFormulaEvaluator.evaluateAllFormulaCells(mpqq);
                         try{
+                            String outputFileName = "";
+                            if( new File(outputFolderPath+"\\"+
+                                            currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm").exists() ){
+                                outputFileName = outputFolderPath+"\\"+
+                                            currentSupplier.replaceAll("[^a-zA-Z]+", "")+"("+ Math.random() +").xlsm";
+                            }else{
+                                outputFileName = outputFolderPath+"\\"+
+                                            currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm";
+                            }
                             FileOutputStream outFile = new FileOutputStream(
-                                    new File(outputFolderPath+"\\"+
-                                            currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
+                                    new File(outputFileName));
                             mpqq.write(outFile);
                             outFile.close();
                         }catch(Exception w){
@@ -504,9 +559,17 @@ public class MPQQ {
                         if( !currentSupplier.equalsIgnoreCase(nextSupplier) ){
                             XSSFFormulaEvaluator.evaluateAllFormulaCells(mpqq);
                             try{
+                                String outputFileName = "";
+                                if( new File(outputFolderPath+"\\"+
+                                                currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm").exists() ){
+                                    outputFileName = outputFolderPath+"\\"+
+                                                currentSupplier.replaceAll("[^a-zA-Z]+", "")+"("+ Math.random() +").xlsm";
+                                }else{
+                                    outputFileName = outputFolderPath+"\\"+
+                                                currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm";
+                                }
                                 FileOutputStream outFile = new FileOutputStream(
-                                        new File(outputFolderPath+"\\"+
-                                                currentSupplier.replaceAll("[^a-zA-Z]+", "")+".xlsm"));
+                                        new File(outputFileName));
                                 mpqq.write(outFile);
                                 outFile.close();
                             }catch(Exception w){
@@ -520,6 +583,7 @@ public class MPQQ {
                             mpqqTab1CurrentRow = mpqqTab1FirstRow;
                             mpqqTab6CurrentRow = mpqqTab6FirstRow;
                             filling = false;
+                            formulaCurRow = FORMULA_IDX_LIM;
                         }
                     }
 
